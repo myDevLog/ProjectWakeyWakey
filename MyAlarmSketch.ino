@@ -328,6 +328,9 @@ class homeScreen {
         rtc.setTime(tempHour, tempMin, t.sec);  
       }
 
+      //now display the proper time
+      t = rtc.getTime();
+
       //start displaying the real time again
       this->updateMin(t.min);
       this->updateHour(t.hour);
@@ -596,19 +599,6 @@ class alarmScreen : public setTimeScreen {
   
   //Wake Me UP!!!, Wake Me UP Inside!!!
   bool wakeMeUp() {
-
-//    Serial.print("Current Time: ");
-//    Serial.print( t.hour);
-//    Serial.print(" ");
-//    Serial.print( t.min);
-//    Serial.println("");
-//
-//    Serial.print("Alarm Time: ");
-//    Serial.print( EEPROM.read(ALARMHOURINDEX) );
-//    Serial.print(" ");
-//    Serial.print( EEPROM.read(ALARMMININDEX) );
-//    Serial.println("");
-    
     //checks if the time has come to wake the user
     if(t.hour == EEPROM.read(ALARMHOURINDEX) && t.min == EEPROM.read(ALARMMININDEX) && wakeActive){
 
@@ -683,10 +673,50 @@ class userInput{
   private:
   //stores the states of each pin in the char
   char pins = 0;
+  StopWatch watches[7];
 
   //stores how many times the ligth_out pin has been switched for getting the state of the light
   int lightSwitches = 1;
 
+  private: timedPinOutput(StopWatch &refWatch, int pinOut, bool currentPin){
+    if(refWatch.isRunning() && refWatch.elapsed() > DEBOUNCETIME){
+      refWatch.stop();
+      refWatch.reset();
+      digitalWrite(pinOut, LOW);
+      currentPin = 0;
+    } else if(!refWatch.isRunning() && currentPin){
+      refWatch.start();
+      digitalWrite(pinOut, HIGH);
+    }
+  }
+
+  private: timedPinOutput(StopWatch &refWatch, int pinOut, bool currentPin, bool &changeState){
+    //the debouncer stops the user from desyncronising the actual state of the lamp with the state the changeState-Variable is referencing
+    //otherwise the reed-relay cannot switch quick enough which results in a timing-nightmare
+    static StopWatch debouncer;
+
+    //stop the user from spaming the button
+    if(!(debouncer.elapsed() > 0 && debouncer.elapsed() < DEBOUNCETIME * 3)){
+      if(refWatch.isRunning() && refWatch.elapsed() > DEBOUNCETIME){
+        refWatch.stop();
+        refWatch.reset();
+        digitalWrite(pinOut, LOW);
+        currentPin = 0;
+
+        //start the cooldown on the pin
+        debouncer.start();      
+      
+      } else if(!refWatch.isRunning() && currentPin){
+        refWatch.start();
+        digitalWrite(pinOut, HIGH);
+        changeState = !changeState;
+        
+        //cooldown on the pin is done
+        debouncer.stop();
+        debouncer.reset();
+      } 
+    }
+  }
   
   //functions for the interrupts
   public: void togglePin(enum p inputPin){
@@ -707,98 +737,56 @@ class userInput{
 
 
   public: void plusInterrupt(homeScreen &myHomeScreen, alarmScreen &myAlarmScreen, slumberScreen &mySlumberScreen) {
-  //increment if the homeScreen is Open
-  if (pageOpen == 1) {
-    myHomeScreen.increase();
+    //increment if the homeScreen is Open
+    if (pageOpen == 1) {
+      myHomeScreen.increase();
+    }
+    //increment if the alarmScreen is Open
+    else if (pageOpen == 2) {
+      myAlarmScreen.increase();
+    }
+    //increment if the slumberScreen is open
+    else if (pageOpen == 3) {
+      mySlumberScreen.increase();
+    }
   }
-  //increment if the alarmScreen is Open
-  else if (pageOpen == 2) {
-    myAlarmScreen.increase();
-  }
-  //increment if the slumberScreen is open
-  else if (pageOpen == 3) {
-    mySlumberScreen.increase();
-  }
-}
 
   public: void minusInterrupt(homeScreen &myHomeScreen, alarmScreen &myAlarmScreen, slumberScreen &mySlumberScreen) {
-  //decrement if the homeScreen is Open
-  if (pageOpen == 1) {
-    myHomeScreen.decrease();
+    //decrement if the homeScreen is Open
+    if (pageOpen == 1) {
+      myHomeScreen.decrease();
+    }
+    //decrement if the alarmScreen is Open
+    else if (pageOpen == 2) {
+      myAlarmScreen.decrease();
+    }
+    //decrement if the slumberScreen is open
+    else if (pageOpen == 3) {
+      mySlumberScreen.decrease();
+    }
   }
-  //decrement if the alarmScreen is Open
-  else if (pageOpen == 2) {
-    myAlarmScreen.decrease();
-  }
-  //decrement if the slumberScreen is open
-  else if (pageOpen == 3) {
-    mySlumberScreen.decrease();
-  }
-}
 
   
   public: void processUserInput(homeScreen &myHomeScreen, alarmScreen &myAlarmScreen, slumberScreen &mySlumberScreen){
     
-    //cancel opposite user input
+    //temporary storage, because getPin() sets the respective bit to 0
     bool tempBrighter = this->getPin(brighter), tempDarker = this->getPin(darker);
-
+    
+    //cancel opposite user input
     if(tempBrighter && tempDarker){
       tempBrighter = 0;
       tempDarker = 0;
     }
 
-    if(!tempBrighter && digitalRead(BRIGHTER_IN) == HIGH){ digitalWrite(BRIGHTER_OUT, LOW); }
-    if(tempBrighter){
-      digitalWrite(BRIGHTER_OUT, !digitalRead(BRIGHTER_OUT));
-      delay(DEBOUNCETIME);
-      tempBrighter = 0;
-    }
+    this->timedPinOutput(watches[0], BRIGHTER_OUT, tempBrighter);
+    this->timedPinOutput(watches[1], DARKER_OUT, tempDarker);
+    this->timedPinOutput(watches[2], COLORLIGHT_OUT, this->getPin(colorLight));
+    this->timedPinOutput(watches[3], LIGHTSWITCH_OUT, this->getPin(lightSwitch), lightState);
+
+    this->timedPinOutput(watches[4], SCREENPOWER_OUT, this->getPin(screenWhileSlumber), screenState);
 
 
-    if(!tempDarker && digitalRead(DARKER_IN) == HIGH){ digitalWrite(DARKER_OUT, LOW); }
-    if(tempDarker){
-      digitalWrite(DARKER_OUT, !digitalRead(DARKER_OUT));
-      delay(DEBOUNCETIME);
-      tempDarker = 0;
-    }
-
-    bool tempColorLight = this->getPin(colorLight);
-    if(!tempColorLight && digitalRead(COLORLIGHT_IN) == HIGH){ digitalWrite(COLORLIGHT_OUT, LOW); }
-    if(tempColorLight){
-      digitalWrite(COLORLIGHT_OUT, !digitalRead(COLORLIGHT_OUT));
-      delay(DEBOUNCETIME);
-    }
-
-    bool tempLightSwitch = this->getPin(lightSwitch);
-    if(!tempLightSwitch && digitalRead(LIGHTSWITCH_IN) == HIGH){ digitalWrite(LIGHTSWITCH_OUT, LOW); };
-    if(tempLightSwitch){
-      Serial.print("LightState-Variable: ");
-      Serial.print(lightState);
-      Serial.println("");
-      
-      digitalWrite(LIGHTSWITCH_OUT, !digitalRead(LIGHTSWITCH_OUT));
-      ++lightSwitches;
-      if(lightSwitches == 2){
-        lightState = !lightState;
-        lightSwitches = 0;
-      }
-      delay(DEBOUNCETIME);
-    }
-
-
-    bool tempSlumber = this->getPin(screenWhileSlumber);
-    //if the user wants the screen turned on
-    if(tempSlumber && !screenState){
-      resetScreen();
-      screenState = true;
-    }
-    //if the user wants the screen turned off
-    else if(tempSlumber && screenState){
-      digitalWrite(SCREENPOWER_OUT, LOW);
-      screenState = false;
-    }
-    
-
+    //temporary storage, because getPin() sets the respective bit to 0
     bool tempPlus = this->getPin(plus), tempMinus = this->getPin(minus);
     
     //cancel opposite user input
@@ -887,10 +875,10 @@ void setButtonPins(){
 
   
   //sets the pin where a button can be pressed to a interrupt
-  attachPCINT(digitalPinToPCINT(BRIGHTER_IN), brighterPressed, CHANGE);
-  attachPCINT(digitalPinToPCINT(DARKER_IN), darkerPressed, CHANGE);
-  attachPCINT(digitalPinToPCINT(COLORLIGHT_IN), colorLightPressed, CHANGE);
-  attachPCINT(digitalPinToPCINT(LIGHTSWITCH_IN), lightSwitchPressed, CHANGE);
+  attachPCINT(digitalPinToPCINT(BRIGHTER_IN), brighterPressed, FALLING);
+  attachPCINT(digitalPinToPCINT(DARKER_IN), darkerPressed, FALLING);
+  attachPCINT(digitalPinToPCINT(COLORLIGHT_IN), colorLightPressed, FALLING);
+  attachPCINT(digitalPinToPCINT(LIGHTSWITCH_IN), lightSwitchPressed, FALLING);
   attachPCINT(digitalPinToPCINT(SCREENWHILESLUMBER_IN), screenWhileSlumberPressed, FALLING);
   attachPCINT(digitalPinToPCINT(PLUSPIN_IN), plusPressed, FALLING);
   attachPCINT(digitalPinToPCINT(MINUSPIN_IN), minusPressed, FALLING);
