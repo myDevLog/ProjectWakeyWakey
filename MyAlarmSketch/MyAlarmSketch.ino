@@ -678,7 +678,7 @@ class userInput{
   //stores how many times the ligth_out pin has been switched for getting the state of the light
   int lightSwitches = 1;
 
-  private: timedPinOutput(StopWatch &refWatch, int pinOut, bool currentPin){
+  private: void timedPinOutput(StopWatch &refWatch, int pinOut, bool currentPin){
     if(refWatch.isRunning() && refWatch.elapsed() > DEBOUNCETIME){
       refWatch.stop();
       refWatch.reset();
@@ -690,7 +690,7 @@ class userInput{
     }
   }
 
-  private: timedPinOutput(StopWatch &refWatch, int pinOut, bool currentPin, bool &changeState){
+  private: void lightSwitchPinOutput(StopWatch &refWatch, int pinOut, bool currentPin, bool &changeState){
     //the debouncer stops the user from desyncronising the actual state of the lamp with the state the changeState-Variable is referencing
     //otherwise the reed-relay cannot switch quick enough which results in a timing-nightmare
     static StopWatch debouncer;
@@ -710,6 +710,40 @@ class userInput{
         refWatch.start();
         digitalWrite(pinOut, HIGH);
         changeState = !changeState;
+        
+        //cooldown on the pin is done
+        debouncer.stop();
+        debouncer.reset();
+      } 
+    }
+  }
+
+
+  public: void screenPowerPinOutput(StopWatch &refWatch, int pinOut, bool currentPin, bool &changeState){
+    //the debouncer stops the user from desyncronising the actual state of the lamp with the state the changeState-Variable is referencing
+    //otherwise the reed-relay cannot switch quick enough which results in a timing-nightmare
+    static StopWatch debouncer;
+
+    //stop the user from spaming the button
+    if(!(debouncer.elapsed() > 0 && debouncer.elapsed() < DEBOUNCETIME)){
+      if(refWatch.isRunning() && refWatch.elapsed() > DEBOUNCETIME){
+        refWatch.stop();
+        refWatch.reset();
+        currentPin = 0;
+
+        //start the cooldown on the pin
+        debouncer.start();      
+      
+      } else if(!refWatch.isRunning() && currentPin){
+        refWatch.start();
+
+        changeState = !changeState;
+
+        if(changeState){
+          	resetScreen();
+        } else {
+          digitalWrite(pinOut, LOW);
+        }
         
         //cooldown on the pin is done
         debouncer.stop();
@@ -781,9 +815,9 @@ class userInput{
     this->timedPinOutput(watches[0], BRIGHTER_OUT, tempBrighter);
     this->timedPinOutput(watches[1], DARKER_OUT, tempDarker);
     this->timedPinOutput(watches[2], COLORLIGHT_OUT, this->getPin(colorLight));
-    this->timedPinOutput(watches[3], LIGHTSWITCH_OUT, this->getPin(lightSwitch), lightState);
+    this->lightSwitchPinOutput(watches[3], LIGHTSWITCH_OUT, this->getPin(lightSwitch), lightState);
 
-    this->timedPinOutput(watches[4], SCREENPOWER_OUT, this->getPin(screenWhileSlumber), screenState);
+    this->screenPowerPinOutput(watches[4], SCREENPOWER_OUT, this->getPin(screenWhileSlumber), screenState);
 
 
     //temporary storage, because getPin() sets the respective bit to 0
