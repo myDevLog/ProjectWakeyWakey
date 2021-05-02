@@ -583,32 +583,17 @@ class setTimeScreen {
 
 //declares a subside class of setTimeScreen in order to manage the alarm feature seperately
 class alarmScreen : public setTimeScreen {
-  private:
-  bool wakeActive = true;
-
-  public: 
-  void openScreen(String upperText, String lowerText) {
+  public: void openScreen(String upperText, String lowerText) {
     pageOpen = 2;
     this->drawScreen(upperText, lowerText);
   }
-
-  void resetAlarm(){
-    Serial.println("AlarmScreen: Alarm reset");
-    wakeActive = true;
-  }
   
   //Wake Me UP!!!, Wake Me UP Inside!!!
-  bool wakeMeUp() {
+  public: bool wakeMeUp() {
     //checks if the time has come to wake the user
-    if(t.hour == EEPROM.read(ALARMHOURINDEX) && t.min == EEPROM.read(ALARMMININDEX) && wakeActive){
-
-      Serial.println("Light activated");
-      wakeActive = false;
-      
+    if(t.hour == EEPROM.read(ALARMHOURINDEX) && t.min == EEPROM.read(ALARMMININDEX)){
       return true;
-    }
-    else {
-      Serial.println("AlarmScreen: Nothing Actiavated");
+    } else {
       return false;
     }
   }
@@ -620,32 +605,18 @@ class alarmScreen : public setTimeScreen {
 
 //declares a subside class of setTimeScreen in order to manage the slumber feature seperately
 class slumberScreen : public setTimeScreen {
-  private:
-  bool slumberActive = true;
-
-  public:
-  void openScreen(String upperText, String lowerText) {
+  public: void openScreen(String upperText, String lowerText) {
       pageOpen = 3;
       this->drawScreen(upperText, lowerText);
   }
 
-  void resetSlumber(){ 
-    Serial.println("Slumber Screen: Slumber reseted");
-    slumberActive = true;
-  }
-
-  void slumber(alarmScreen &myAlarmScreen){
-    
+  public: void slumber(){
     //if its time to let the user know that its bed time
-    if(t.hour == EEPROM.read(SLUMBERHOURINDEX) && t.min == EEPROM.read(SLUMBERMININDEX) && slumberActive){
-
-      Serial.println("SlumberScreen: myAlarmScreen.resetAlarm executed");
-      myAlarmScreen.resetAlarm();
+    if(t.hour == EEPROM.read(SLUMBERHOURINDEX) && t.min == EEPROM.read(SLUMBERMININDEX)){
       
       //dont annoy the user by making a sound when hes already sleeping and has turned off the lamp
       if(!lightState){
         Serial.println("Slumber Screen: Light already off");
-        slumberActive = false;
         return;
       }
       
@@ -655,14 +626,9 @@ class slumberScreen : public setTimeScreen {
       tone(SLUMBERTONE_OUT, 1480);
       delay(250);
       noTone(SLUMBERTONE_OUT);
-
-    } else {
-      Serial.println("Slumber Screen: Nothing Actiavated");
     }
   }
 };
-
-
 
 
 
@@ -963,20 +929,16 @@ void loop() {
   //only check the alarms every new minute
   if(prevMin != t.min){
       
-      //wake the user and prime the slumberScreen
-      if(myAlarmScreen.wakeMeUp()){
-        Serial.println("alarmScreen returned true, resetting slumberScreen");
-        mySlumberScreen.resetSlumber();
-        
-        //dont turn on the LED if the user is awake already
-        if(!lightState){
-          Serial.println("AlarmScreen: Light is already on");
+      //dont turn on the LED if the user is awake already
+      if(!lightState){
+        //if its time wake the user
+        if(myAlarmScreen.wakeMeUp()){
           myInput.togglePin(lightSwitch);
         }
       }
 
-      //tell the user its time to go to Bed and prime the alarmScreen
-      mySlumberScreen.slumber(myAlarmScreen);
+      //tell the user its time to go to Bed
+      mySlumberScreen.slumber();
 
 
       //update the minute, but only if the screen is turned off so the update function works
