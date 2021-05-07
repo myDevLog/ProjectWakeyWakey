@@ -36,19 +36,20 @@ Time t;
 #endif
 
 
+//commented defines are colors i might want to use later
 //define shades
 #define BLACK           0x0000
-#define GREY            0x738E
+//#define GREY            0x738E
 #define LIGHTGREY       0xE6FB
 #define WHITE           0xFFFF
 //define 3 base colors
 #define RED             0xF000
-#define BLUE            0x00FF
-#define YELLOW          0xFF00
+//#define BLUE            0x00FF
+//#define YELLOW          0xFF00
 //define 3 secondary colors
-#define GREEN           0x0F00
-#define PURPLE          0xF0FF
-#define ORANGE          0xFC00
+//#define GREEN           0x0F00
+//#define PURPLE          0xF0FF
+//#define ORANGE          0xFC00
 
 
 
@@ -65,13 +66,11 @@ Time t;
 // between X+ and X- Use any multimeter to read it
 // For the one we're using, its 300 ohms across the X plate
 TouchScreen ts = TouchScreen(XP, YP, XM, YM, 300);
-
 TSPoint p;
+
 
 #define MINPRESSURE 10
 #define MAXPRESSURE 1000
-
-
 
 #define LCD_CS A3
 #define LCD_CD A2
@@ -81,10 +80,8 @@ TSPoint p;
 #define LCD_RESET A4
 
 
-
 //initialise the object which draws the screen
 Elegoo_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
-
 
 
 //defines where the offset-vars will be stored in the EEPROM Array
@@ -92,7 +89,6 @@ Elegoo_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
 #define ALARMMININDEX 3
 #define SLUMBERHOURINDEX 4
 #define SLUMBERMININDEX 5
-
 
 
 //defines the outputs of the seven interrupt pins
@@ -124,16 +120,14 @@ Elegoo_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
 
 
 
-//tells which page is open
+//1 == homeScreen, 2 == alarmScreen, 3 == SlumberScreen
 int pageOpen = 1;
 
 //stores the previous time stamps so the lcd doesnt have to draw the time new every frame
-int prevMin = 0;
-int prevHour = 0;
+Time prevT;
 
 //shows which time-field has been highlighted, only one can be highlighted
-bool hourHighlighted = false;
-bool minHighlighted = false;
+bool hourHighlighted = false, minHighlighted = false;
 
 //stores if the Screen is currently powered or not
 bool screenState = true;
@@ -149,12 +143,12 @@ void highlight(int posX, int posY, int width, int height, bool toggle) {
     tft.drawRoundRect(posX - THRESHOLD * 2, posY - THRESHOLD * 2, width + THRESHOLD * 4, height + THRESHOLD * 4, ANGLE, BLACK);
   }
   else {
+    //overdraw only the previously drawn frame to save processing power
     tft.drawRoundRect(posX - THRESHOLD * 2, posY - THRESHOLD * 2, width + THRESHOLD * 4, height + THRESHOLD * 4, ANGLE, WHITE);
   }
 }
 
 
-//draws a Square Box for the back Button
 void drawButtonBox(int posX, int posY, int width, int height) {
   tft.fillRoundRect(posX, posY, width, height, ANGLE, LIGHTGREY);
   tft.drawRoundRect(posX, posY, width, height, ANGLE, BLACK);
@@ -169,15 +163,13 @@ void printText(int posX, int posY, int textSize, String text) {
 
 
 void showTime(int x, int y, int time_) {
-  //override the last print
+  //override only the last print to save processing power
   tft.fillRect(x, y, NUM7WIDTH * 2 + SIZE7SPACE + THRESHOLD, SIZE7HEIGHT, WHITE);
 
-  //print the tenth digit
   tft.setTextSize(7);
   tft.setCursor(x , y);
   tft.print(time_ / 10);
 
-  //print the single digit
   tft.setCursor(x + NUM7WIDTH + SIZE7SPACE , y);
   tft.print(time_ % 10);
 }
@@ -186,96 +178,85 @@ void showTime(int x, int y, int time_) {
 
 
 
-//declares the class homeScreen which shows the time
 class homeScreen {
   private:
-  //gets added onto the rtc time, so the time from the rtc clock doesnt have to be overwritten every time
+  //temporary variables for the configuration of time so the rtc time doesnt have to be overwritten with every single change
   int tempHour = 0, tempMin = 0;
 
   //0 == nothing highlited, 1 == hour highlited, 2 == minute highlited
   int highlighted = 0;
 
-  //declares the variables for the two buttons
   int alarmWidth = 60, slumberWidth = 120, buttonHeight = 20;
 
-  //store where the lines should start
   const int lowerTextStart = 200, higherTextStart = 80;
 
-  //store the dimensions of the two time labels
   const int hourDim[4] = {tft.height() / 2 - (NUM7WIDTH - 1) / 2 + THRESHOLD - (NUM7WIDTH * 2 + THRESHOLD), higherTextStart, NUM7WIDTH * 2 + SIZE7SPACE, SIZE7HEIGHT};
   const int minDim[4] = {tft.height() / 2 + (NUM7WIDTH - 1) / 2 - THRESHOLD, higherTextStart, NUM7WIDTH * 2 + SIZE7SPACE, SIZE7HEIGHT};
   
-  //defines the dimensions of the two buttons
   const int alarmButtonDim[4] = {tft.height() / 4 - alarmWidth / 2 - THRESHOLD, lowerTextStart - THRESHOLD, alarmWidth + THRESHOLD * 2, buttonHeight  + THRESHOLD};
   const int slumberButtonDim[4] = {tft.height() / 2 - THRESHOLD, lowerTextStart - THRESHOLD, slumberWidth + THRESHOLD * 2, buttonHeight + THRESHOLD};
   
 
 
-  //increases the tempMin by one, starts at 0 if over 59
   private: void increaseMin() {
+      //prevent going over the boundary
       if ( (tempMin + 1) > 59) { tempMin = 0; }
       else { tempMin++; }
       
-      //if the user is modyfieing the time, display it
       this->updateMin(tempMin);
-    }
+  }
 
 
-  //decreases the tempMin by one, starts at 60 if under 0
   private: void decreaseMin() {
+      //prevent going over the boundary
       if ( (tempMin - 1) < 0) { tempMin = 59; }
       else { tempMin--; }
       
-      //if the user is modyfieing the time, display it
       this->updateMin(tempMin);
-    }
+  }
 
 
-  //increases the tempHour by one, starts at 0 if over 23
   private: void increaseHour() {
+      //prevent going over the boundary
       if ( (tempHour + 1) > 23) { tempHour = 0; }
       else { tempHour++; }
       
-      //if the user is modyfieing the time, display it
       this->updateHour(tempHour);
-    }
+  }
 
 
-  //decreases the tempHour by one, starts at 24 if under 0
   private: void decreaseHour() {
+      //prevent going over the boundary
       if ( (tempHour - 1) < 0) { tempHour = 23; }
       else { tempHour--; }
       
-      //if the user is modyfieing the time, display it
       this->updateHour(tempHour);
-    }
+  }
+
   
-  
-  
-  public: bool checkHourBounds(int x, int y){
-     if(y > hourDim[0] - THRESHOLD && x > hourDim[1] - THRESHOLD && y < hourDim[0] + hourDim[2] + THRESHOLD*2 && x < hourDim[1] + hourDim[3] + THRESHOLD*2){
+  public: bool checkHourBounds(TSPoint &tempP){
+     if(tempP.y > hourDim[0] - THRESHOLD && tempP.x > hourDim[1] - THRESHOLD && tempP.y < hourDim[0] + hourDim[2] + THRESHOLD*2 && tempP.x < hourDim[1] + hourDim[3] + THRESHOLD*2){
       return true;
     } else { return false; }
   }
 
   
-  public: bool checkMinBounds(int x, int y){
-     if(y > minDim[0] - THRESHOLD && x > minDim[1] - THRESHOLD && y < minDim[0] + minDim[2] + THRESHOLD*2 && x < minDim[1] + minDim[3] + THRESHOLD*2){
+  public: bool checkMinBounds(TSPoint &tempP){
+     if(tempP.y > minDim[0] - THRESHOLD && tempP.x > minDim[1] - THRESHOLD && tempP.y < minDim[0] + minDim[2] + THRESHOLD*2 && tempP.x < minDim[1] + minDim[3] + THRESHOLD*2){
       return true;
     } else { return false; }
   }
 
 
-  //checks if the touch was in the bounds of the alarm button
-  public: bool checkAlarmBounds(int x, int y){
-    if(y > alarmButtonDim[0] && x > alarmButtonDim[1] && y < alarmButtonDim[0] + alarmButtonDim[2] && x < alarmButtonDim[1] + alarmButtonDim[3]){
+  public: bool checkAlarmBounds(TSPoint &tempP){
+    if(tempP.y > alarmButtonDim[0] && tempP.x > alarmButtonDim[1] && tempP.y < alarmButtonDim[0] + alarmButtonDim[2] && tempP.x < alarmButtonDim[1] + alarmButtonDim[3]){
       return true;
     } else { return false; }
   }
 
   
-  public: bool checkSlumberBounds(int x, int y){
-    if(y > slumberButtonDim[0] && x > slumberButtonDim[1] && y < slumberButtonDim[0] + slumberButtonDim[2] && x < slumberButtonDim[1] + slumberButtonDim[3]){
+  public: bool checkSlumberBounds(TSPoint &tempP){
+    if(tempP.y > slumberButtonDim[0] && tempP.x > slumberButtonDim[1] && tempP.y < slumberButtonDim[0] + slumberButtonDim[2] && tempP.x < slumberButtonDim[1] + slumberButtonDim[3]){
       return true;
     } else { return false; }
   }
@@ -287,17 +268,12 @@ class homeScreen {
     highlighted = 0;
     int textOffset = 1;
 
-    //resets the screen so new things can be drawn
     tft.fillScreen(WHITE);
 
-    //draws the hour and the minute
-    //gets the data from the rtc
     t = rtc.getTime();
     
     this->updateHour(t.hour);
-    
     printText(tft.width() / 2 - (NUM7WIDTH - 1) / 2, higherTextStart, 7, ":");
-    
     this->updateMin(t.min);
 
     //draws the alarm button and the text
@@ -335,7 +311,6 @@ class homeScreen {
       this->updateMin(t.min);
       this->updateHour(t.hour);
     }
-     
     //highlights the hour, dehighlights the minute
     else if (_highlight == 1) {
       highlight(hourDim[0], hourDim[1], hourDim[2], hourDim[3], true);
@@ -354,7 +329,6 @@ class homeScreen {
       this->updateHour(tempHour);
       this->updateMin(tempMin);
     }
-     
     //highlights the minute, dehighlights the hour
     else if (_highlight == 2) {
       highlight(hourDim[0], hourDim[1], hourDim[2], hourDim[3], false);
@@ -385,7 +359,7 @@ class homeScreen {
   public: void updateMin(int _min) { showTime(minDim[0], minDim[1], _min); }
 
 
-  public: void increase(){
+  public: homeScreen & operator ++ (int){
     if (minHighlighted) {
       this->increaseMin();
     }
@@ -394,7 +368,7 @@ class homeScreen {
     }
   }
 
-  public: void decrease(){
+  public: homeScreen & operator -- (int){
     if (minHighlighted) {
       this->decreaseMin();
     }
@@ -411,7 +385,6 @@ class homeScreen {
 //declares the class alarmScreen for setting the alarm and slumber time
 class setTimeScreen {
   protected:
-  //stores the time for the daily alarm / slumber alarm
   int timerMin, timerHour;
 
   private:
@@ -424,51 +397,71 @@ class setTimeScreen {
 
   int higherTextStart = tft.width() * 0.25, timeStart = tft.width() * 0.5, lowerTextStart = tft.width() * 0.75;
 
-  //store the dimensions of the two time labels
   const int hourDim[4] = {startWidth, tft.width() / 2 - (SIZE7HEIGHT / 2), NUM7WIDTH * 2 + SIZE7SPACE, SIZE7HEIGHT};
   const int minDim[4] = {startWidth + NUM7WIDTH * 3 + SIZE7SPACE, tft.width() / 2 - (SIZE7HEIGHT / 2), NUM7WIDTH * 2 + SIZE7SPACE, SIZE7HEIGHT};
 
   const int backButtonDim[4] = {startWidth / 2, startWidth / 2, (startWidth / 3) * 2, (startWidth / 3) * 2};
 
+  private: void increaseMinOffset() {
+    //prevent going over the boundary
+    if ( (timerMin + 1) > 59) { timerMin = 0; }
+    else { timerMin++; }
+    this->updateMinute();
+  }
+
+  private: void decreaseMinOffset() {
+    //prevent going over the boundary
+    if ( (timerMin - 1) < 0) { timerMin = 59; }
+    else { timerMin--; }
+    this->updateMinute();
+  }
+
+  private: void increaseHourOffset() {
+    //prevent going over the boundary
+    if ( (timerHour + 1) > 23) { timerHour = 0; }
+    else { timerHour++; }
+    this->updateHour();
+  }
+
+  private: void decreaseHourOffset() {
+    //prevent going over the boundary
+    if ( (timerHour - 1) < 0) { timerHour = 23; }
+    else { timerHour--; }
+    this->updateHour();
+  }
   
-  public:
-  int getTimerMin(){ return timerMin; }
-  int getTimerHour(){ return timerHour; }
+  public: int getTimerMin(){ return timerMin; }
+  public: int getTimerHour(){ return timerHour; }
 
  
-  bool checkHourBounds(int x, int y){
-    if(x > hourDim[1] && y > hourDim[0] && x < hourDim[1] + hourDim[3] && y < hourDim[0] + hourDim[2]){
-      Serial.println("Hour clicked");
+  public: bool checkHourBounds(TSPoint &tempP){
+    if(tempP.x > hourDim[1] && tempP.y > hourDim[0] && tempP.x < hourDim[1] + hourDim[3] && tempP.y < hourDim[0] + hourDim[2]){
       return true;
     } else{ return false; }
   }
 
 
-  bool checkMinBounds(int x, int y){
-    if(x > minDim[1] && y > minDim[0] && x < minDim[1] + minDim[3] && y < minDim[0] + minDim[2]){
-      Serial.println("Min clicked");
+  public: bool checkMinBounds(TSPoint &tempP){
+    if(tempP.x > minDim[1] && tempP.y > minDim[0] && tempP.x < minDim[1] + minDim[3] && tempP.y < minDim[0] + minDim[2]){
       return true;
     } else{ return false; }
   }
 
 
-  bool checkBackBounds(int x, int y){
-    if(x > backButtonDim[0] - THRESHOLD && y > backButtonDim[1] - THRESHOLD && x < backButtonDim[0] + backButtonDim[2] + THRESHOLD*2 && y < backButtonDim[1] + backButtonDim[3] + THRESHOLD*2){
-      Serial.println("Back clicked");
+  public: bool checkBackBounds(TSPoint &tempP){
+    if(tempP.x > backButtonDim[0] - THRESHOLD && tempP.y > backButtonDim[1] - THRESHOLD && tempP.x < backButtonDim[0] + backButtonDim[2] + THRESHOLD*2 && tempP.y < backButtonDim[1] + backButtonDim[3] + THRESHOLD*2){
       return true;
     } else{ return false; }
   }
  
   
   //draws the Screen where the user can change a time set by this class
-  void drawScreen(String upperText, String lowerText) {
+  public: void drawScreen(String upperText, String lowerText) {
     bool plusP = false, minusP = false;
       
-    //resets the screen and the highlighted areas
     tft.fillScreen(WHITE);
     highlighted = 0;
   
-    //draw the back Button
     drawButtonBox(startWidth / 2, startWidth / 2, (startWidth / 3) * 2, (startWidth / 3) * 2);
     tft.fillTriangle(startWidth / 2 + THRESHOLD, startWidth / 2 + (startWidth / 3), startWidth / 2 + (startWidth / 3) * 2 - THRESHOLD * 2, startWidth / 2 + THRESHOLD, startWidth / 2 + (startWidth / 3) * 2 - THRESHOLD * 2, startWidth / 2 + (startWidth / 3) * 2 - THRESHOLD - 1, BLACK);
 
@@ -486,39 +479,42 @@ class setTimeScreen {
 
 
   //highlights one or none of the time-drawings with a roundRect around it
-  void setHighlight(int _highlight) {
+  public: void setHighlight(int _highlight) {
     //dehighlights both hour and minute
     if (_highlight == highlighted) {
       highlight(hourDim[0], hourDim[1], hourDim[2], hourDim[3], false);
       highlight(minDim[0], minDim[1], minDim[2], minDim[3], false);
+      
       highlighted = 0;
+      
       minHighlighted = false;
       hourHighlighted = false;
     }
-    
     //highlights the hour, dehighlights the minute
     else if (_highlight == 1) {
       highlight(hourDim[0], hourDim[1], hourDim[2], hourDim[3], true);
       highlight(minDim[0], minDim[1], minDim[2], minDim[3], false);
+      
       highlighted = 1;
+      
       minHighlighted = false;
       hourHighlighted = true;
     }
-    
     //highlights the minute, dehighlights the hour
     else if (_highlight == 2) {
       highlight(hourDim[0], hourDim[1], hourDim[2], hourDim[3], false);
       highlight(minDim[0], minDim[1], minDim[2], minDim[3], true);
+      
       highlighted = 2;
+      
       minHighlighted = true;
       hourHighlighted = false;
     }
-    
     delay(DEBOUNCETIME);
   }
 
   //initiates the addresses for the time, because this class is inherited by other classes
-  void initAdress(int _hourAdress, int _minAdress){
+  public: void initAdress(int _hourAdress, int _minAdress){
     hourAdress = _hourAdress;
     minAdress = _minAdress;
 
@@ -526,62 +522,37 @@ class setTimeScreen {
     timerMin = EEPROM.read(minAdress);
   }
 
-  void increaseMinOffset() {
-    if ( (timerMin + 1) > 59) { timerMin = 0; }
-    else { timerMin++; }
-    this->updateMinute();
-  }
-
-  void decreaseMinOffset() {
-    if ( (timerMin - 1) < 0) { timerMin = 59; }
-    else { timerMin--; }
-    this->updateMinute();
-  }
-
-  void increaseHourOffset() {
-    if ( (timerHour + 1) > 23) { timerHour = 0; }
-    else { timerHour++; }
-    this->updateHour();
-  }
-
-  void decreaseHourOffset() {
-    if ( (timerHour - 1) < 0) { timerHour = 23; }
-    else { timerHour--; }
-    this->updateHour();
-  }
-
   //updates ONLY the hour
-  void updateHour() { showTime(hourDim[0], hourDim[1], timerHour); }
+  public: void updateHour() { showTime(hourDim[0], hourDim[1], timerHour); }
 
   //updates ONLY the minute
-  void updateMinute() { showTime(minDim[0], minDim[1], timerMin); }
+  public: void updateMinute() { showTime(minDim[0], minDim[1], timerMin); }
 
   
-  void increase(){
-    if (minHighlighted) {
+  public: setTimeScreen & operator ++ (int){
+    if(minHighlighted) {
       this->increaseMinOffset();
     }
     else if (hourHighlighted) {
       this->increaseHourOffset();
     }
   }
-
-  void decrease(){
-    if (minHighlighted) {
+  
+  public: setTimeScreen & operator -- (int){
+    if(minHighlighted) {
       this->decreaseMinOffset();
     }
     else if (hourHighlighted) {
       this->decreaseHourOffset();
     }
   }
-  
 };
 
 
 
 
 
-//declares a subside class of setTimeScreen in order to manage the alarm feature seperately
+//manage the alarm feature seperately
 class alarmScreen : public setTimeScreen {
   public: void openScreen(String upperText, String lowerText) {
     pageOpen = 2;
@@ -603,7 +574,7 @@ class alarmScreen : public setTimeScreen {
 
 
 
-//declares a subside class of setTimeScreen in order to manage the slumber feature seperately
+//manage the slumber feature seperately
 class slumberScreen : public setTimeScreen {
   public: void openScreen(String upperText, String lowerText) {
       pageOpen = 3;
@@ -615,13 +586,8 @@ class slumberScreen : public setTimeScreen {
     if(t.hour == EEPROM.read(SLUMBERHOURINDEX) && t.min == EEPROM.read(SLUMBERMININDEX)){
       
       //dont annoy the user by making a sound when hes already sleeping and has turned off the lamp
-      if(!lightState){
-        Serial.println("Slumber Screen: Light already off");
-        return;
-      }
-      
-      Serial.println("Slumber Screen: Noise activated");
-      
+      if(!lightState){ return; }
+            
       //make a noise to let the user know that its bed time
       tone(SLUMBERTONE_OUT, 1480);
       delay(250);
@@ -648,21 +614,25 @@ class userInput{
     if(refWatch.isRunning() && refWatch.elapsed() > DEBOUNCETIME){
       refWatch.stop();
       refWatch.reset();
+      
       digitalWrite(pinOut, LOW);
+      
       currentPin = 0;
     } else if(!refWatch.isRunning() && currentPin){
       refWatch.start();
+      
       digitalWrite(pinOut, HIGH);
     }
   }
 
   private: void lightSwitchPinOutput(StopWatch &refWatch, int pinOut, bool currentPin, bool &changeState){
     //the debouncer stops the user from desyncronising the actual state of the lamp with the state the changeState-Variable is referencing
-    //otherwise the reed-relay cannot switch quick enough which results in a timing-nightmare
+    //otherwise the reed-relay cannot switch quickly enough which results in a timing-nightmare
     static StopWatch debouncer;
 
     //stop the user from spaming the button
     if(!(debouncer.elapsed() > 0 && debouncer.elapsed() < DEBOUNCETIME * 3)){
+      
       if(refWatch.isRunning() && refWatch.elapsed() > DEBOUNCETIME){
         refWatch.stop();
         refWatch.reset();
@@ -682,6 +652,7 @@ class userInput{
         debouncer.reset();
       } 
     }
+  
   }
 
 
@@ -692,6 +663,7 @@ class userInput{
 
     //stop the user from spaming the button
     if(!(debouncer.elapsed() > 0 && debouncer.elapsed() < DEBOUNCETIME)){
+      
       if(refWatch.isRunning() && refWatch.elapsed() > DEBOUNCETIME){
         refWatch.stop();
         refWatch.reset();
@@ -715,6 +687,7 @@ class userInput{
         debouncer.stop();
         debouncer.reset();
       } 
+    
     }
   }
   
@@ -737,32 +710,32 @@ class userInput{
 
 
   public: void plusInterrupt(homeScreen &myHomeScreen, alarmScreen &myAlarmScreen, slumberScreen &mySlumberScreen) {
-    //increment if the homeScreen is Open
+    //increment only if homeScreen is Open
     if (pageOpen == 1) {
-      myHomeScreen.increase();
+      myHomeScreen++;
     }
-    //increment if the alarmScreen is Open
+    //increment only if alarmScreen is Open
     else if (pageOpen == 2) {
-      myAlarmScreen.increase();
+      myAlarmScreen++;
     }
-    //increment if the slumberScreen is open
+    //increment only if slumberScreen is open
     else if (pageOpen == 3) {
-      mySlumberScreen.increase();
+      mySlumberScreen++;
     }
   }
 
   public: void minusInterrupt(homeScreen &myHomeScreen, alarmScreen &myAlarmScreen, slumberScreen &mySlumberScreen) {
-    //decrement if the homeScreen is Open
+    //decrement only if homeScreen is Open
     if (pageOpen == 1) {
-      myHomeScreen.decrease();
+      myHomeScreen--;
     }
-    //decrement if the alarmScreen is Open
+    //decrement only if alarmScreen is Open
     else if (pageOpen == 2) {
-      myAlarmScreen.decrease();
+      myAlarmScreen--;
     }
-    //decrement if the slumberScreen is open
+    //decrement only if slumberScreen is open
     else if (pageOpen == 3) {
-      mySlumberScreen.decrease();
+      mySlumberScreen--;
     }
   }
 
@@ -778,6 +751,7 @@ class userInput{
       tempDarker = 0;
     }
 
+    //pins about the lamp
     this->timedPinOutput(watches[0], BRIGHTER_OUT, tempBrighter);
     this->timedPinOutput(watches[1], DARKER_OUT, tempDarker);
     this->timedPinOutput(watches[2], COLORLIGHT_OUT, this->getPin(colorLight));
@@ -856,7 +830,7 @@ void minusPressed(){ myInput.togglePin(minus); }
 
 
 void setButtonPins(){
-  //sets the pins for the interrupts as an input
+  //input-declaration for the interrupts
   pinMode(BRIGHTER_IN, INPUT);
   pinMode(DARKER_IN, INPUT);
   pinMode(COLORLIGHT_IN, INPUT);
@@ -866,14 +840,18 @@ void setButtonPins(){
   pinMode(MINUSPIN_IN, INPUT);
 
 
-  //sets the pins for the reaction to the user input
+  //output to change the light, and turn on/off the screen
   pinMode(SCREENPOWER_OUT, OUTPUT);
   pinMode(BRIGHTER_OUT, OUTPUT);
   pinMode(DARKER_OUT, OUTPUT);
   pinMode(COLORLIGHT_OUT, OUTPUT);
   pinMode(LIGHTSWITCH_OUT, OUTPUT);
-
   
+  pinMode(SLUMBERTONE_OUT, OUTPUT);
+  //prevent the buzzer from making a noise
+  digitalWrite(SLUMBERTONE_OUT, LOW);
+
+
   //sets the pin where a button can be pressed to a interrupt
   attachPCINT(digitalPinToPCINT(BRIGHTER_IN), brighterPressed, FALLING);
   attachPCINT(digitalPinToPCINT(DARKER_IN), darkerPressed, FALLING);
@@ -889,28 +867,19 @@ void setButtonPins(){
 
 
 void setup() {
-  //starts the serial monitor for debuging
-  Serial.begin(9600);
-
-  //sets the interrupts for the user input
   setButtonPins();
 
   // Initializes the rtc object and gets the data from it
   rtc.begin();
   t = rtc.getTime();
-
   //sets the updating time to the current time
-  prevMin = t.min;
-  prevHour = t.hour;
+  prevT = t;
 
   //initiates the adresses for the location of the index in the EEPROM for the respective Screen
   myAlarmScreen.initAdress(ALARMHOURINDEX, ALARMMININDEX);
   mySlumberScreen.initAdress(SLUMBERHOURINDEX, SLUMBERMININDEX);
 
   resetScreen();
-
-  pinMode(SLUMBERTONE_OUT, OUTPUT);
-  digitalWrite(SLUMBERTONE_OUT, LOW);
 
   pinMode(13, OUTPUT);
 }
@@ -920,14 +889,12 @@ void setup() {
 
 
 void loop() { 
-  //process the pressed buttons
   myInput.processUserInput(myHomeScreen, myAlarmScreen, mySlumberScreen);
 
-  //gets the data from the rtc
   t = rtc.getTime();
 
   //only check the alarms every new minute
-  if(prevMin != t.min){
+  if(prevT.min != t.min){
       
       //dont turn on the LED if the user is awake already
       if(!lightState){
@@ -943,7 +910,7 @@ void loop() {
 
       //update the minute, but only if the screen is turned off so the update function works
       if(!screenState){
-        prevMin = t.min;
+        prevT.min = t.min;
       } 
     }
   
@@ -956,47 +923,43 @@ void loop() {
     pinMode(YP, OUTPUT);
   
     //updates the minute if the minute is different from the last drawn minute
-    if (prevMin != t.min && pageOpen == 1) {
+    if (prevT.min != t.min && pageOpen == 1) {
       myHomeScreen.updateMin(t.min);
-      prevMin = t.min;
+      prevT.min = t.min;
     }
   
     //updates the hour if the hour is different form the last drawn hour
-    if (prevHour != t.hour && pageOpen == 1) {
+    if (prevT.hour != t.hour && pageOpen == 1) {
       myHomeScreen.updateHour(t.hour);
-      prevHour = t.hour;
+      prevT.hour = t.hour;
     }
     
     
     
-    //checks if the user touched the lcd
+    //rpocess stuff only if the user touched the lcd
     if (p.z > MINPRESSURE && p.z < MAXPRESSURE) {
   
-      //converts the coordinates of the touch into usable values
+      //convert coordinates into usable values
       p.x = map(p.x, TS_MINX, TS_MAXX, 0, tft.height() );
       p.y = map(p.y, TS_MINY, TS_MAXY, 0, tft.width() );
-  
-      Serial.print("X = "); Serial.print(p.x);
-      Serial.print("\tY = "); Serial.print(p.y);
-      Serial.print("\tPressure = "); Serial.println(p.z);
   
       //check the clickables if the homeScreen is open
       if (pageOpen == 1) {
         
         //checks if the alarm button has been pressed
-        if (myHomeScreen.checkAlarmBounds(p.x, p.y)) {
+        if (myHomeScreen.checkAlarmBounds(p)) {
           myAlarmScreen.openScreen("Alarm auf", "gesetzt");
         }
         //checks if the slumber button has been pressed
-        else if (myHomeScreen.checkSlumberBounds(p.x, p.y)) {
+        else if (myHomeScreen.checkSlumberBounds(p)) {
           mySlumberScreen.openScreen("Schlummern auf", "gesetzt");
         }
         //if the user has tapped on the hour
-        else if (myHomeScreen.checkHourBounds(p.x, p.y)) {
+        else if (myHomeScreen.checkHourBounds(p)) {
           myHomeScreen.setHighlight(1);
         }
         //if the user has tapped on the minute
-        else if (myHomeScreen.checkMinBounds(p.x, p.y)) {
+        else if (myHomeScreen.checkMinBounds(p)) {
           myHomeScreen.setHighlight(2);
         }
       }
@@ -1004,40 +967,38 @@ void loop() {
       else if (pageOpen == 2) {
         
         //checks if the backbutton in the alarmScreen has been pressed
-        if (myAlarmScreen.checkBackBounds(p.x, p.y)) {
-          prevHour = t.hour;
-          prevMin = t.min;
+        if (myAlarmScreen.checkBackBounds(p)) {
+          prevT = t;
           
           EEPROM.update(ALARMHOURINDEX, myAlarmScreen.getTimerHour());
           EEPROM.update(ALARMMININDEX, myAlarmScreen.getTimerMin());
           myHomeScreen.drawScreen();
         }
         //if the user has tapped on the hour
-        else if (myAlarmScreen.checkHourBounds(p.x, p.y)) {
+        else if (myAlarmScreen.checkHourBounds(p)) {
           myAlarmScreen.setHighlight(1);
         }
         //if the user has tapped on the minute
-        else if (myAlarmScreen.checkMinBounds(p.x, p.y)) {
+        else if (myAlarmScreen.checkMinBounds(p)) {
           myAlarmScreen.setHighlight(2);
         }
       }
       //check the clickables if the slumberScreen is open
       else if (pageOpen == 3) {
         //checks if the backbutton in the slumberScreen has been pressed
-        if (mySlumberScreen.checkBackBounds(p.x, p.y)) {
-          prevHour = t.hour;
-          prevMin = t.min;
+        if (mySlumberScreen.checkBackBounds(p)) {
+          prevT = t;
 
           EEPROM.update(SLUMBERHOURINDEX, mySlumberScreen.getTimerHour());
           EEPROM.update(SLUMBERMININDEX, mySlumberScreen.getTimerMin());
           myHomeScreen.drawScreen();
         }
         //if the user has tapped on the hour
-        else if (mySlumberScreen.checkHourBounds(p.x, p.y)) {
+        else if (mySlumberScreen.checkHourBounds(p)) {
           myAlarmScreen.setHighlight(1);
         }
         //if the user has tapped on the minute
-        else if (mySlumberScreen.checkMinBounds(p.x, p.y)) {
+        else if (mySlumberScreen.checkMinBounds(p)) {
           myAlarmScreen.setHighlight(2);
         }
       }
