@@ -9,4 +9,4 @@ To-Do-List:
 - [x] Rework the Way the Time gets processed
 - [x] Change the way the AlarmScreen and the SlumberScreen are alternating between each other
 - ~~Join the alarmScreen and SlumberScreen class to one class~~
-- [ ] code refactoring + better commentaries
+- [x] code refactoring + better commentaries
